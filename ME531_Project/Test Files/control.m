@@ -1,9 +1,22 @@
-function [all_t, all_positions] = control(init, ref, random)
-    %init and ref need to be a cell of 2x1 values ie, in = {[1;1] [2;2]}
+function [next_state, next_input] = control(init, ref, t_step, random, verbose)
+    %init and ref are 1xn arrays of position information
     %random is a true or false value that allows the noise aspect to be
     %turned off or on
+    %verbose plots the graphs
+    
+    %instead of a tspan, I have the code request a step size.
+    %the code will plot a tspan of ten seconds But the output is the very
+    %next out put based on tstep. So the plots are really just for show if
+    %you gave the controller more time
 
     clc, close all
+
+    %example commands to test 
+    %in = [1 2 3 4 5 6 7 8 9 10 11 12]
+    %r = [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 1.1 1.2]
+    %control(in, r, 0.001, false, true)
+
+    
     %known values:
     m = 1; b =1; k =1; 
 
@@ -16,11 +29,24 @@ function [all_t, all_positions] = control(init, ref, random)
     omega_n = k/m;
     
     %sets some of the variables and aspects for the LQR and matrices
-    tspan = 0:.1:10;
-    Q = [10 0 ; 0 100];
-    R = 2000;
+    tspan = 0:t_step:10; %calculates a pretty graph over ten seconds, 
+    % but actually only sends back the next steps
+
+    %tspan = [0 t_step t_step*2];%if you don't want the graphs just
+    %uncomment this and it will make only find a tspan of a couple of
+    %entries
+    %the lqr controller does weird stuff if it's only 2 entries
+
+    Q = [10000 0 ; 0 10000]; %Q was chosen to be very aggressive
+    R = 0.1;
     C = [1 0];
     B = [0; 1/m];
+
+    %the function is past an array 1x12 array for both reference and
+    %initial positions, we need to make this a 2x12 array to include the
+    %velocities which will jsut be 0
+    init = [init; zeros(1,length(init))];
+    ref = [ref; zeros(1,length(init))];
 
     %if random is true, then we don't just graph the values of b and k but
     %also we randomly sample between min and max k and be (set by the
@@ -30,25 +56,59 @@ function [all_t, all_positions] = control(init, ref, random)
         %have a range of different sigma values
         ks = actuator_noise(k, k_percent);
         bs = actuator_noise(b, b_percent);
-        figure
-        hold on
+        if verbose ==true
+            figure
+            hold on
+        end
         for a =1 :length(ks)
             A = [0, 1; -ks(a)/m, -bs(a)/m]; %A matrix is changing
             
             for k = 1:length(init)
                 s = ss(A,B,C,0);
                 [K_lqr,S,e] = lqr(s,Q,R); %uses LQR controller
-                u_lqr = @(x) - K_lqr*(x-ref{k}); % control law
-                [all_t{k},all_positions{k}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init{k});
-                plot(all_t{k},all_positions{k}(:,1))
+                u_lqr = @(x) - K_lqr*(x-ref(:,k)); % control law
+                [all_t{k},all_positions{k}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,k));
+                if a == 4 %save the array for when it is just the mean
+                    mean_all_t = all_t;
+                    mean_all_positions = all_positions;
+                end
+                if verbose == true
+                    plot(all_t{k},all_positions{k}(:,1))
+                end
             end
        
         end
-        title('Position LQR')
-        xlabel('Time (sec)')
-        ylabel('Position (m)')
-        figure
-        hold on
+        if verbose == true
+            title('Position LQR')
+            xlabel('Time (sec)')
+            ylabel('Position (m)')
+            figure
+            hold on
+        end
+        input = [];
+        for j = 1:length(init) %use the mean value solution to 
+                % calculate inputs, we could technically do it for all of 
+                % the sifferent z-scores but I don't really see why
+            for q = 1:length(mean_all_positions{j}(:,1))
+                input_line = u_lqr(mean_all_positions{j}(q,:));
+                input(q,1) = input_line(1);
+                input(q,2) = input_line(2);
+            end
+            mean_all_inputs{j} = input(:,2);
+            if verbose == true
+                plot(mean_all_t{j}, input(:,2));
+            end
+        end
+        all_positions = mean_all_positions; %since there are multiple 
+            % arrays with the name all positions we have to clarify that we
+            % want to save the mean or 0 zscore one
+        if verbose == true
+            title("Control Input")
+            ylabel("Control Input")
+            xlabel("Time (sec)")
+            figure
+            hold on
+        end
         %we also can compare the solution that does pole placement rather
         %than an LQR controller
         for c =1:length(ks) 
@@ -59,54 +119,94 @@ function [all_t, all_positions] = control(init, ref, random)
                 p1 = -zeta*omega_n + 1i*omega_n*sqrt(1-zeta^2);
                 p2 = -zeta*omega_n - 1i*omega_n*sqrt(1-zeta^2);
                 K_pole = place(A,B,[p1 p2]); %finds the gains
-                u_pole = @(x)-K_pole*(x-ref{m}); % control l [t, positions] = control(in, r)aw
-                [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init{m});
-                plot(t,x(:,1))
+                u_pole = @(x)-K_pole*(x-ref(:,m)); % control l [t, positions] = control(in, r)aw
+                [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,m));
+                if verbose == true
+                    plot(t,x(:,1))
+                end
             end
         end
-        title('Position Poles')
-        xlabel('Time (sec)')
-        ylabel('Position (m)')
-    
+
+        if verbose == true
+            title('Position Poles')
+            xlabel('Time (sec)')
+            ylabel('Position (m)')
+        end
     %if random is false then we don't bother taking a sample, we just graph
     %with the values of k and b without any noise
     else
         %The A matrix only needs to be defined once
         A = [0, 1; -k/m, -b/m];
-
-        figure
-        hold on
+        if verbose == true
+            figure
+            hold on
+        end
         %for each entry in the intial values we run an LQR controller
         for k = 1:length(init)
             s = ss(A,B,C,0);
             [K_lqr,S,e] = lqr(s,Q,R);
-            u_lqr = @(x) - K_lqr*(x-ref{k}); % control law
-            [all_t{k},all_positions{k}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init{k});
-            plot(all_t{k},all_positions{k}(:,1))
-            % u = @(x)-K*(x-r); % control law
-            % [t,x] = ode45(@(t,x)springmass(x,m, b, k, u(x)),tspan,x0);
+            u_lqr = @(x) - K_lqr*(x-ref(:,k)); % control law
+            [all_t{k},all_positions{k}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,k));
+
+            if verbose == true
+                plot(all_t{k},all_positions{k}(:,1))
+            end
+            
         end
-        title('Position LQR')
-        xlabel('Time (sec)')
-        ylabel('Position (m)')
-        
+        if verbose == true
+            title('Position LQR')
+            xlabel('Time (sec)')
+            ylabel('Position (m)')
+            figure
+            hold on
+            input = [];
+            for j = 1:length(init)
+                for q = 1:length(all_positions{j}(:,1))
+                    input_line = u_lqr(all_positions{j}(q,:));
+                    input(q,1) = input_line(1);
+                    input(q,2) = input_line(2);
+                end
+                all_inputs{j} = input(:,2);
+                plot(all_t{j}, input(:,2))
+            end
+
+            title("Control Input")
+            ylabel("Control Input")
+            xlabel("Time (sec)")
+            figure
+            hold on
+        end
         %we also can compare the solution that does pole placement rather
         %than an LQR controller
-        figure
-        hold on
+        
         for m = 1:length(init)
             %for each entry in the list of initial coord we find then place
             %our poles
             p1 = -zeta*omega_n + 1i*omega_n*sqrt(1-zeta^2);
             p2 = -zeta*omega_n - 1i*omega_n*sqrt(1-zeta^2);
             K_pole = place(A,B,[p1 p2]); %finds the gains
-            u_pole = @(x)-K_pole*(x-ref{m});
-            [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init{m});
-            plot(t,x(:,1))
+            u_pole = @(x)-K_pole*(x-ref(:,m));
+            [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,m));
+            if verbose == true
+                plot(t,x(:,1))
+            end
         end
-        title('Position Poles')
-        xlabel('Time (sec)')
-        ylabel('Position (m)')
+        if verbose == true
+            title('Position Poles')
+            xlabel('Time (sec)')
+            ylabel('Position (m)')
+        end
+    end
+
+    %writes out the values
+    next_state = [];
+    next_input = [];
+    for l =1:length(all_positions)
+        next_state(1,l) = all_positions{l}(2,1);%gets the 2nd entry in the states, so the one right after the initial one, or the next step/state
+        next_state(2,l) = all_positions{l}(2,2);
+        next_input = [next_input, all_inputs{l}(1,:)]; %gets the first input applied, which should be the one that is connected to the 2nd state/next state
+        %should we actually be getting the second entry? The first are all
+        %the same?
     end
 
     %this function aims to simulate the possible range of vlaues we could
