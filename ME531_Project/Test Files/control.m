@@ -1,4 +1,4 @@
-function [next_state, next_input] = control(init_positions, initial_vel, ref, t_step, random, verbose)
+function [next_state, next_input] = control(init_positions, initial_vel, ref, t_step, t_max, random, verbose)
     %init and ref are 1xn arrays of position information
     %random is a true or false value that allows the noise aspect to be
     %turned off or on
@@ -14,7 +14,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
     %example commands to test 
     %in = [1 2 3 4 5 6 7 8 9 10 11 12]
     %r = [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 1.1 1.2]
-    %control(in, in_v, r, 0.001, false, true)
+    %control(in, in_v, r, 0.001, 10, false, true)
 
     %in = [4 4 4 4 4 4 4 4 4 4 4 4]
     %r = [4.01 4.01 4.01 4.01 4.01 4.01 4.01 4.01 4.01 4.01 4.01 4.01]
@@ -34,20 +34,21 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
     %sets some of the variables and aspects for the LQR and matrices
     
     if verbose == true
-        tspan = 0:t_step:5; %calculates a pretty graph over 5 seconds, 
-        % but actually only sends back the next steps
+        tspan = 0:t_step:t_max; %calculates a pretty graph over a selected 
+        %tspan = [0 t_max];
+        % amount of seconds, but actually only sends back the next steps
     else
-        tspan = [0 t_step];
+        tspan = [0 t_step t_step*2];
     end
     %tspan = [0 t_step t_step*2];%if you don't want the graphs just
     %uncomment this and it will make only find a tspan of a couple of
     %entries
     %the lqr controller does weird stuff if it's only 2 entries
 
-    Q = [10000 0 ; 0 10000]; %Q was chosen to be very aggressive
-    R = 0.1;
-    %Q = [10 0 ; 0 10]; %Q was chosen to be very aggressive
-    %R = 1;
+    Q = [5000 0 ; 0 5000]; %Q was chosen to be very aggressive
+    R = 0.01;
+    %Q = [100 0 ; 0 100]; %Q was chosen to be very aggressive
+    %R = 0.001;
     C = [1 0];
     B = [0; 1/m];
 
@@ -146,6 +147,9 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
         end
     %if random is false then we don't bother taking a sample, we just graph
     %with the values of k and b without any noise
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     else
         %The A matrix only needs to be defined once
         A = [0, 1; -k/m, -b/m];
@@ -153,7 +157,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
             figure
             hold on
         end
-        %for each entry in the intial values we run an LQR controller
+        %for each entry in the initial values we run an LQR controller
         for n = 1:length(init)
             clear u_lqr
             clear x
@@ -191,7 +195,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
         end
         %we also can compare the solution that does pole placement rather
         %than an LQR controller
-        
+        % 
         for v = 1:length(init)
             %for each entry in the list of initial coord we find then place
             %our poles
