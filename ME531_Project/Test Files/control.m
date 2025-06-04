@@ -21,15 +21,15 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
     %in_v = [0 0 0 0 0 0 0 0 0 0 0 0]
     
     %known values:
-    m = 1; b =1; k =1; 
+    m_real = 1; b_real = 1; k_real = 1; 
 
     %maximum 5% change for k and b, can be tuned as neeeded
     k_percent = 0.05;
-    b_percent =0.05;
+    b_percent = 0.05;
     
     %finds zeta and omega for pole placing later on
-    zeta = b/(2*sqrt(k*m));
-    omega_n = k/m;
+    zeta = b_real/(2*sqrt(k_real*m_real));
+    omega_n = k_real/m_real; %NOTE FROM TANNER, THIS IS PROLLY WRONG
     
     %sets some of the variables and aspects for the LQR and matrices
     
@@ -45,12 +45,12 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
     %entries
     %the lqr controller does weird stuff if it's only 2 entries
 
-    Q = [5000 0 ; 0 5000]; %Q was chosen to be very aggressive
-    R = 0.01;
+    Q = [2000 0 ; 0 1]; %Q was chosen to be very aggressive
+    R = 1;
     %Q = [100 0 ; 0 100]; %Q was chosen to be very aggressive
     %R = 0.001;
     C = [1 0];
-    B = [0; 1/m];
+    B = [0; 1/m_real];
 
     %the function is past an array 1x12 array for both reference and
     %initial positions, we need to make this a 2x12 array to include the
@@ -152,7 +152,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     else
         %The A matrix only needs to be defined once
-        A = [0, 1; -k/m, -b/m];
+        A = [0, 1; -k_real/m_real, -b_real/m_real];
         if verbose == true
             figure
             hold on
@@ -162,10 +162,10 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
             clear u_lqr
             clear x
             s = ss(A,B,C,0);
-            [K_lqr,~,~] = lqr(s,Q,R);
+            [K_lqr,~,~] = lqr(A,B,Q,R);
             u_lqr = @(x) - K_lqr*(x-ref(:,n)); % control law
-            [all_t{n},all_positions{n}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,n));
-   
+            [all_t{n},all_positions{n}] = ode45(@(t,x)springmass(x,m_real, b_real, k_real, u_lqr(x)),tspan,init(:,n));
+            
             if verbose == true
                 plot(all_t{n},all_positions{n}(:,1))
             end
@@ -203,7 +203,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
             p2 = -zeta*omega_n - 1i*omega_n*sqrt(1-zeta^2);
             K_pole = place(A,B,[p1 p2]); %finds the gains
             u_pole = @(x)-K_pole*(x-ref(:,v));
-            [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,v));
+            [t,x] = ode45(@(t,x)springmass(x,m_real, b_real, k_real, u_pole(x)),tspan,init(:,v));
             if verbose == true
                 plot(t,x(:,1))
             end
