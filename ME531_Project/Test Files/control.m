@@ -113,6 +113,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
         all_positions = mean_all_positions; %since there are multiple 
             % arrays with the name all positions we have to clarify that we
             % want to save the mean or 0 zscore one
+        all_inputs = mean_all_inputs;
         if verbose == true
             title("Control Input")
             ylabel("Control Input")
@@ -157,18 +158,13 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
             clear u_lqr
             clear x
             s = ss(A,B,C,0);
-
             [K_lqr,~,~] = lqr(s,Q,R);
-  
             u_lqr = @(x) - K_lqr*(x-ref(:,n)); % control law
-  
-            
             [all_t{n},all_positions{n}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,n));
    
             if verbose == true
                 plot(all_t{n},all_positions{n}(:,1))
             end
-
             for q = 1:length(all_positions{n}(:,1))
                 input_line = u_lqr(all_positions{n}(q,:));
                 input(q,1) = input_line(1);
