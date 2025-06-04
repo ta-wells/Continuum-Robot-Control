@@ -73,18 +73,18 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
         for a =1 :length(ks)
             A = [0, 1; -ks(a)/m, -bs(a)/m]; %A matrix is changing
             
-            for k = 1:length(init)
+            for c = 1:length(init)
                 s = ss(A,B,C,0);
                 [K_lqr,S,e] = lqr(s,Q,R); %uses LQR controller
-                u_lqr = @(x) - K_lqr*(x-ref(:,k)); % control law
+                u_lqr = @(x) - K_lqr*(x-ref(:,c)); % control law
                 
-                [all_t{k},all_positions{k}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,k));
+                [all_t{c},all_positions{c}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,c));
                 if a == 4 %save the array for when it is just the mean
                     mean_all_t = all_t;
                     mean_all_positions = all_positions;
                 end
                 if verbose == true
-                    plot(all_t{k},all_positions{k}(:,1))
+                    plot(all_t{c},all_positions{c}(:,1))
                 end
             end
        
@@ -130,8 +130,8 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
                 p1 = -zeta*omega_n + 1i*omega_n*sqrt(1-zeta^2);
                 p2 = -zeta*omega_n - 1i*omega_n*sqrt(1-zeta^2);
                 K_pole = place(A,B,[p1 p2]); %finds the gains
-                u_pole = @(x)-K_pole*(x-ref(:,m)); % control l [t, positions] = control(in, r)aw
-                [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,m));
+                u_pole = @(x)-K_pole*(x-ref(:,c)); % control l [t, positions] = control(in, r)aw
+                [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,c));
                 if verbose == true
                     plot(t,x(:,1))
                 end
@@ -153,32 +153,28 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
             hold on
         end
         %for each entry in the intial values we run an LQR controller
-        for k = 1:length(init)
+        for n = 1:length(init)
             clear u_lqr
             clear x
             s = ss(A,B,C,0);
-            disp(A)
-            disp(B)
-            disp(C)
-            disp(Q)
-            disp(R)
+
             [K_lqr,~,~] = lqr(s,Q,R);
-            disp(K_lqr)
-            u_lqr = @(x) - K_lqr*(x-ref(:,k)); % control law
-            disp(ref(:,k))
-            disp(init(:,k))
-            [all_t{k},all_positions{k}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,k));
-            %disp(all_positions{k})
+  
+            u_lqr = @(x) - K_lqr*(x-ref(:,n)); % control law
+  
+            
+            [all_t{n},all_positions{n}] = ode45(@(t,x)springmass(x,m, b, k, u_lqr(x)),tspan,init(:,n));
+   
             if verbose == true
-                plot(all_t{k},all_positions{k}(:,1))
+                plot(all_t{n},all_positions{n}(:,1))
             end
 
-            for q = 1:length(all_positions{k}(:,1))
-                input_line = u_lqr(all_positions{k}(q,:));
+            for q = 1:length(all_positions{n}(:,1))
+                input_line = u_lqr(all_positions{n}(q,:));
                 input(q,1) = input_line(1);
                 input(q,2) = input_line(2);
             end
-            all_inputs{k} = input(:,2);
+            all_inputs{n} = input(:,2);
 
         end
         if verbose == true
@@ -200,14 +196,14 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
         %we also can compare the solution that does pole placement rather
         %than an LQR controller
         
-        for m = 1:length(init)
+        for v = 1:length(init)
             %for each entry in the list of initial coord we find then place
             %our poles
             p1 = -zeta*omega_n + 1i*omega_n*sqrt(1-zeta^2);
             p2 = -zeta*omega_n - 1i*omega_n*sqrt(1-zeta^2);
             K_pole = place(A,B,[p1 p2]); %finds the gains
-            u_pole = @(x)-K_pole*(x-ref(:,m));
-            [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,m));
+            u_pole = @(x)-K_pole*(x-ref(:,v));
+            [t,x] = ode45(@(t,x)springmass(x,m, b, k, u_pole(x)),tspan,init(:,v));
             if verbose == true
                 plot(t,x(:,1))
             end
@@ -252,6 +248,7 @@ function [next_state, next_input] = control(init_positions, initial_vel, ref, t_
 
     function dx = springmass(x,m, b,k,u) %actual function
         dx(1,1) = x(2);
+
         dx(2,1) = u-b/m*x(2) - k/m*x(1);
     end
 end
